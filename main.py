@@ -4,20 +4,43 @@ import string
 import os
 import asyncio
 import yt_dlp
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timedelta, timezone
 from telegram import Update, Bot, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
-# 1. ضع التوكن الخاص بك هنا
+# ==========================================
+# ⚙️ إعدادات البوت الأساسية (قم بتعديلها)
+# ==========================================
 TOKEN = "8702640145:AAHyLv6r3xfyf9x-dptwim6_BrnJSbWYpmY"
+OWNER_ID = 123456789  # ⚠️ استبدل هذا الرقم بآيدي حسابك الحقيقي في تليجرام لتتحكم بالبوت
 
-# 2. 🔥 ضع هنا الآيدي الشخصي الخاص بك (حسابك أنت المالك) لكي تتحكم بالبوت من التليجرام
-OWNER_ID = 8702640145  # استبدل هذا الرقم بآيدي حسابك الحقيقي
-
-# وضع الصيانة
+# وضع الصيانة الافتراضي
 MAINTENANCE_MODE = False
 
-# قائمة الـ 30 آية قرآنية مزخرفة ومنسقة بعناية
+# ==========================================
+# 🌐 سيرفر الفحص الوهمي لتجنب إغلاق Render للبوت
+# ==========================================
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is running successfully on Render Web Service!")
+
+    def log_message(self, format, *args):
+        return  # لمنع ملء الـ Logs بطلبات الفحص المتكررة
+
+def run_health_check_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    print(f"✓ Health check server started on port {port}")
+    server.serve_forever()
+
+# ==========================================
+# 📜 قائمة الـ 30 آية قرآنية مزخرفة
+# ==========================================
 QURAN_VERSES = [
     "✨ ﴿ اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ﴾ ✨",
     "📖 ﴿ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴾ 📖",
@@ -32,7 +55,7 @@ QURAN_VERSES = [
     "✨ ﴿ لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ﴾ 📖",
     "📖 ﴿ وَاعْتَصِمُوا بِحَبْلِ اللَّهِ جَمِيعًا وَلَا تَفَرَّقُوا ﴾ ✨",
     "✨ ﴿ قُلْ هُوَ اللَّهُ أَحَدٌ ﴾ 📖",
-    "📖 ﴿ وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ ﴾ ✨",
+    "📖 ﴿ وَمَا Tَوْفِيقِي إِلَّا بِاللَّهِ ﴾ ✨",
     "✨ ﴿ إِنَّ أَكْرَمَكُمْ عِنْدَ اللَّهِ أَتْقَاكُمْ ﴾ 📖",
     "📖 ﴿ وَأُفَوِّضُ أَمْرِي إِلَى اللَّهِ ﴾ ✨",
     "✨ ﴿ وَجَعَلْنَا مِنَ الْمَاءِ كُلَّ شَيْءٍ حَيٍّ ﴾ 📖",
@@ -45,13 +68,15 @@ QURAN_VERSES = [
     "📖 ﴿ إِنَّ الْحَسَنَاتِ يُذْهِبْنَا السَّيِّئَاتِ ﴾ ✨",
     "✨ ﴿ وَاخْفِضْ لَهُمَا جَنَاحَ الذُّلِّ مِنَ الرَّحْمَةِ ﴾ 📖",
     "📖 ﴿ وَلَا تَحْسَبَنَّ اللَّهَ غَافِلًا عَمَّا يَعْمَلُ الظَّالِمُونَ ﴾ ✨",
-    "✨ ﴿ نَبِّئْ عِبَادِي أَنِّي أَنَا الْغَفُورُ الرَّحِيمُ ﴾ 📖",
+    "✨ ﴿ نَبِّئْ عِبَادِي أَنِّي أَنَا الْغَفُورُ الرَّ الرحيمُ ﴾ 📖",
     "📖 ﴿ ادْعُونِي أَسْتَجِبْ لَكُمْ ﴾ ✨",
     "✨ ﴿ وَإِنْ تَعُدُّوا نِعْمَةَ اللَّهِ لَا تُحْصُوهَا ﴾ 📖",
     "📖 ﴿ قُلْ يَا عِبَادِيَ الَّذِينَ أَسْرَفُوا عَلَىٰ أَنْفُسِهِمْ لَا تَقْنَطُوا مِنْ رَحْمَةِ اللَّهِ ﴾ ✨"
 ]
 
-# دالة تلقائية لإنشاء أزرار "القائمة" في التليجرام
+# ==========================================
+# 🔧 دالات المساعدة وإدارة البيانات
+# ==========================================
 async def post_init(application):
     commands = [
         BotCommand("start", "بدء تشغيل البوت والترحيب"),
@@ -61,13 +86,12 @@ async def post_init(application):
     ]
     await application.bot.set_my_commands(commands)
 
-# دالة حفظ الـ ID مع الاسم أو اليوزر
 def save_chat_id(chat_id, name="مستخدم تليجرام"):
+    # Render يعيد تصفير الملفات عند الريستارت، هذا الكود يحافظ على هيكلية التخزين المؤقت
+    lines = []
     if os.path.exists("chats.txt"):
         with open("chats.txt", "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
-    else:
-        lines = []
     
     exists = False
     for line in lines:
@@ -79,7 +103,6 @@ def save_chat_id(chat_id, name="مستخدم تليجرام"):
         with open("chats.txt", "a", encoding="utf-8") as f:
             f.write(f"{chat_id}|{name}\n")
 
-# جلب اسم الحساب أو المجموعة أو اليوزر
 def get_chat_display_name(update: Update):
     if not update or not update.effective_chat:
         return "غير معروف"
@@ -100,7 +123,6 @@ def find_downloaded_file(download_dir, video_id):
             return os.path.join(download_dir, f)
     return None
 
-# دالة البث الإذاعي الذكية (Asynchronous) المناسبة للسيرفرات
 async def run_broadcast_async(bot, message):
     if os.path.exists("chats.txt"):
         with open("chats.txt", "r", encoding="utf-8") as f:
@@ -117,26 +139,24 @@ async def run_broadcast_async(bot, message):
         return count
     return 0
 
-# 🌟 [قسم أوامر المالك السرية للتحكم عن بُعد من التليجرام] 🌟
+# ==========================================
+# 👑 [أوامر التحكم السرية الخاصة بالمالك]
+# ==========================================
 async def owner_broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
-    
     if not context.args:
         await update.message.reply_text("❌ الاستخدام الصحيح: <code>/bc الرسالة هنا</code>", parse_mode='HTML')
         return
-    
     broadcast_msg = " ".join(context.args)
-    status_msg = await update.message.reply_text("📢 جاري إرسال البث الجماعي للسيرفرات والمجموعات...")
+    status_msg = await update.message.reply_text("📢 جاري إرسال البث الجماعي...")
     count = await run_broadcast_async(context.bot, broadcast_msg)
     await status_msg.edit_text(f"✅ تم بنجاح بث رسالتك إلى {count} مستخدم ومجموعة!")
 
 async def owner_verse_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
-    
     if not context.args:
         await update.message.reply_text("❌ الاستخدام الصحيح: <code>/verse رقم_الآية(1-30)</code>", parse_mode='HTML')
         return
-        
     try:
         v_num = int(context.args[0])
         if 1 <= v_num <= 30:
@@ -158,23 +178,14 @@ async def owner_verse_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def owner_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
-    
     if os.path.exists("chats.txt"):
         with open("chats.txt", "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
-        
         total = len(lines)
-        result = f"📊 <b>إحصائيات البوت النشطة الحالية:</b>\n"
-        result += f"📈 إجمالي المشتركين: <b>{total}</b>\n"
-        result += "-----------------------------------------\n"
+        result = f"📊 <b>إحصائيات البوت النشطة الحالية:</b>\n📈 إجمالي المشتركين: <b>{total}</b>\n-----------------------------------------\n"
         for index, line in enumerate(lines, 1):
-            if "|" in line:
-                c_id, c_name = line.split("|", 1)
-            else:
-                c_id, c_name = line, "مستخدم قديم"
+            c_id, c_name = line.split("|", 1) if "|" in line else (line, "مستخدم")
             result += f"{index}. <code>{c_id}</code> | {c_name}\n"
-        
-        # تجنباً لتخطي حد الحروف المسموح به في التليجرام
         if len(result) > 4000:
             result = result[:3900] + "\n\n⚠️ تم اختصار القائمة لكبر حجم البيانات."
         await update.message.reply_text(result, parse_mode='HTML')
@@ -184,12 +195,13 @@ async def owner_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def owner_maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global MAINTENANCE_MODE
     if update.effective_user.id != OWNER_ID: return
-    
     MAINTENANCE_MODE = not MAINTENANCE_MODE
     status = "🔴 [مفعّل - البوت مغلق للعامة]" if MAINTENANCE_MODE else "🟢 [معطّل - البوت يعمل للجميع]"
     await update.message.reply_text(f"⚙️ تم تحديث وضع الصيانة بنجاح:\n{status}")
 
-# [أوامر المستخدمين العادية]
+# ==========================================
+# 👥 [أوامر وخدمات المستخدمين العامة]
+# ==========================================
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if MAINTENANCE_MODE and update.effective_user.id != OWNER_ID: return
     save_chat_id(update.effective_chat.id, get_chat_display_name(update))
@@ -223,27 +235,27 @@ async def generate_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def welcome_new_members_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if (MAINTENANCE_MODE and update.effective_user.id != OWNER_ID) or not update.message or not update.message.new_chat_members:
         return
-    
     save_chat_id(update.effective_chat.id, get_chat_display_name(update))
     for member in update.message.new_chat_members:
         if member.id == context.bot.id: return
-            
         user_mention = f'<a href="tg://user?id={member.id}">{member.first_name}</a>'
         current_time = datetime.now().strftime("%Y-%m-%d ⚡ %I:%M:%S %p")
-        
         welcome_text = (
             f"👑 ✨ <b>تَرْحِيبٌ مَلَكِيٌّ فَاخِرٌ بِالعُضْوِ الجَدِيدْ</b> ✨ 👑\n"
             f"👑 ━━━━━━━━━━━━━━━━━━━━━━━━━ 👑\n\n"
-            f"👋 <b>أهلاً ومرحباً بك يا بطل في المجموعه، نورتنا وشرفتنا بقدومك الميمون ونأمل لك وقتاً رائعاً معنا!</b> ✨\n\n"
-            f"👤 <b>العضو الـكـريـم:</b> {user_mention}\n"
-            f"🆔 <b>الآيـدي الـشخصي:</b> <code>{member.id}</code>\n"
-            f"📅 <b>تاريخ ووقت دخولك:</b> <code>{current_time}</code>\n\n"
+            f"👋 <b>أهلاً ومرحباً بك يا بطل في المجموعة، نورتنا وشرفتنا بقدومك الميمون!</b> ✨\n\n"
+            f"👤 <b>العضو الكريم:</b> {user_mention}\n"
+            f"🆔 <b>الآيدي الشخصي:</b> <code>{member.id}</code>\n"
+            f"📅 <b>تاريخ ووقت الدخول:</b> <code>{current_time}</code>\n\n"
             f"👑 ━━━━━━━━━━━━━━━━━━━━━━━━━ 👑\n"
-            f"💬 تذكر دائماً ذكر الله والتفاعل الراقي مع بقية الأبطال 🌹\n"
-            f"⚙️ لمعرفة خدمات وأوامر البوت المتاحة لك، أرسل: <code>/help</code>"
+            f"💬 تذكر دائماً ذكر الله والتفاعل الراقي 🌹\n"
+            f"⚙️ لمعرفة خدمات وأوامر البوت، أرسل: <code>/help</code>"
         )
         await update.message.reply_text(welcome_text, parse_mode='HTML')
 
+# ==========================================
+# 📥 الدالة المركزية لمعالجة كافة النصوص والتحميل والزخرفة
+# ==========================================
 async def core_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if MAINTENANCE_MODE and update.effective_user.id != OWNER_ID: return
     if not update.message or not update.message.text: return
@@ -252,16 +264,18 @@ async def core_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text_received = update.message.text.strip()
     chat_id = update.effective_chat.id
 
+    # الرد التلقائي المزخرف على السلام
     if text_received in ["سلام", "سلام عليكم", "السلام عليكم", "السلام عليكم ورحمة الله", "السلام عليكم ورحمة الله وبركاته"]:
         user_mention = f'<a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>'
         greeting_reply = (
             f"✨ 💎 <b>『 وَعَلَيْكُمُ السَّلَامُ وَرَحْمَةُ اللهِ تَعَالَىٰ وَبَرَكَاتُهُ 』</b> 💎 ✨\n"
             f"╬════════════════════════╬\n"
-            f"أهلاً وسهلاً بك يا غالي {user_mention} 🌸 نورت المجموعة وشرفتنا بحضورك المتميز! 🔥"
+            f"أهلاً وسهلاً بك يا غالي {user_mention} 🌸 نورت المجموعة وشرفتنا بحضورك المتميز!"
         )
         await update.message.reply_text(greeting_reply, parse_mode='HTML')
         return
 
+    # قسم المشرفين (كتم وطرد)
     if text_received in ["كتم", "طرد", "/mute", "/ban"] and update.message.reply_to_message:
         admin_id = update.effective_user.id
         member = await context.bot.get_chat_member(chat_id=chat_id, user_id=admin_id)
@@ -297,6 +311,7 @@ async def core_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
+    # 🔥 [قسم الزخرفات الأسطورية الشاملة المحدثة ديناميكياً] 🔥
     if text_received.startswith("زخرف ") or text_received.startswith("زخرفة "):
         parts = text_received.split(" ", 1)
         if len(parts) < 2 or not parts[1].strip():
@@ -310,7 +325,7 @@ async def core_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"꧁★{name}★꧂", f"꧁☬{name}☬꧂", f"⫷{name}⫸", f"◤{name}◥", f"【{name}】",
             f"░{name}░", f"⧼{name}⧽", f"╾{name}╼", f"ِٰ༻{name}༺", f"ּ{name}ּ",
             f"𓆩 {name} 𓆪", f"𓍼 {name} 𓍯", f"★彡 {name} 彡★", f"°•. {name} .•°",
-            f" ── {name} ── ", f"╬═ {name} ═╬", f"☠️ {name} ☠️"
+            f" ── {name} ── ", f"╬═ {name} ═╬", f"☠️ {name} ☠️", f"『{name}』", f"↱{name}↰"
         ]
         
         result = "⚔️ <b>إليك تشكيلة الزخرفات الاحترافية الشاملة (اضغط على الاسم للنسخ الفوري):</b>\n\n"
@@ -319,6 +334,7 @@ async def core_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(result, parse_mode='HTML')
         return
 
+    # قسم تنزيل الموسيقى والآوديو عبر الأوامر النصية (يوت)
     if text_received.startswith("يوت "):
         query = text_received.replace("يوت ", "", 1).strip()
         if not query:
@@ -358,6 +374,7 @@ async def core_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception: pass
         return
 
+    # قسم تحميل الفيديوهات التلقائي عند إرسال أي رابط
     if "http://" in text_received or "https://" in text_received:
         urls = [word for word in text_received.split() if word.startswith("http://") or word.startswith("https://")]
         if not urls: return
@@ -395,6 +412,9 @@ async def core_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception: pass
         return
 
+# ==========================================
+# 🕹️ دالة معالجة نقرات أزرار التحكم بالمشرفين
+# ==========================================
 async def admin_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -436,7 +456,14 @@ async def admin_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             await query.edit_message_text(f"❌ لم أتمكن من كتم العضو.")
 
+# ==========================================
+# 🚀 نقطة التشغيل الرئيسية للبوت والسيرفر
+# ==========================================
 if __name__ == "__main__":
+    # تشغيل السيرفر الوهمي الخاص بـ Render في Thread منفصل لعدم تعطيل البوت
+    threading.Thread(target=run_health_check_server, daemon=True).start()
+
+    # بناء وتشغيل تطبيق تليجرام
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -444,7 +471,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("info", info_command))
     app.add_handler(CommandHandler("getkey", generate_key))
     
-    # ربط أوامر التحكم للمالك سرّياً من التليجرام مباشرة
+    # ربط أوامر التحكم السرية للمالك (تكتبها في خاص البوت)
     app.add_handler(CommandHandler("bc", owner_broadcast_command))
     app.add_handler(CommandHandler("verse", owner_verse_command))
     app.add_handler(CommandHandler("stats", owner_stats_command))
@@ -454,5 +481,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, core_text_handler))
     app.add_handler(CallbackQueryHandler(admin_menu_click))
     
-    print("🤖 Bot started successfully on Render Cloud Servers...")
+    print("🤖 Bot is completely optimized and running natively for Render Web Services...")
     app.run_polling()
