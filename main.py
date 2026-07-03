@@ -14,7 +14,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 # ⚙️ إعدادات البوت الأساسية (قم بتعديلها)
 # ==========================================
 TOKEN = "8702640145:AAHyLv6r3xfyf9x-dptwim6_BrnJSbWYpmY"
-OWNER_ID = 123456789  # ⚠️ استبدل هذا الرقم بآيدي حسابك الحقيقي في تليجرام لتتحكم بالبوت
+OWNER_ID = 8038919535  # ⚠️ استبدل هذا الرقم بآيدي حسابك الحقيقي في تليجرام لتتحكم بالبوت
 
 # وضع الصيانة الافتراضي
 MAINTENANCE_MODE = False
@@ -87,7 +87,6 @@ async def post_init(application):
     await application.bot.set_my_commands(commands)
 
 def save_chat_id(chat_id, name="مستخدم تليجرام"):
-    # Render يعيد تصفير الملفات عند الريستارت، هذا الكود يحافظ على هيكلية التخزين المؤقت
     lines = []
     if os.path.exists("chats.txt"):
         with open("chats.txt", "r", encoding="utf-8") as f:
@@ -457,15 +456,16 @@ async def admin_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"❌ لم أتمكن من كتم العضو.")
 
 # ==========================================
-# 🚀 نقطة التشغيل الرئيسية للبوت والسيرفر
+# 🚀 نقطة التشغيل الرئيسية (معدلة ومصلحة لتجنب خطأ الـ Event Loop في Render)
 # ==========================================
-if __name__ == "__main__":
-    # تشغيل السيرفر الوهمي الخاص بـ Render في Thread منفصل لعدم تعطيل البوت
+async def main():
+    # تشغيل السيرفر الوهمي في Thread منفصل لعدم تعطيل البوت
     threading.Thread(target=run_health_check_server, daemon=True).start()
 
-    # بناء وتشغيل تطبيق تليجرام
+    # بناء تطبيق تليجرام
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
 
+    # إضافة الأوامر
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("info", info_command))
@@ -482,4 +482,18 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(admin_menu_click))
     
     print("🤖 Bot is completely optimized and running natively for Render Web Services...")
-    app.run_polling()
+    
+    # تهيئة وتشغيل البوت بطريقة متوافقة مع الـ Event loop
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    
+    # إبقاء البوت قيد التشغيل
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    try:
+        # هذه هي الدالة السحرية التي تمنع ظهور خطأ RuntimeError
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
