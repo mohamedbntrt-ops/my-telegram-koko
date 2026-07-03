@@ -1,30 +1,22 @@
-import logging
-import random
-import string
 import os
 import threading
+import asyncio
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ChatPermissions
+from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
-from datetime import datetime, timedelta, timezone
 
-# ==========================================
 # ⚙️ الإعدادات
-# ==========================================
 TOKEN = "8702640145:AAHyLv6r3xfyf9x-dptwim6_BrnJSbWYpmY"
-OWNER_ID = 123456789  # غير هذا إلى آيديك الحقيقي
+OWNER_ID = 8038919535  # ⚠️ غير ده لآيديك الحقيقي
 ADMIN_PASS = "0658"
 MAINTENANCE_MODE = False
 
-# ==========================================
-# 🌐 سيرفر Render الإجباري
-# ==========================================
+# 🌐 سيرفر Render - ضروري عشان الموقع مايقفلش
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"<html><body><h1>Bot is Running!</h1></body></html>")
+        self.wfile.write(b"Bot is running!")
     def log_message(self, format, *args):
         pass
 
@@ -34,14 +26,12 @@ def start_server():
     print(f"✅ Server running on port {port}")
     server.serve_forever()
 
-# ==========================================
-# 📜 الآيات القرآنية
-# ==========================================
+# 📜 30 آية قرآنية
 QURAN_VERSES = [
     "✨ ﴿ اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ﴾ ✨",
     "📖 ﴿ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴾ 📖",
     "✨ ﴿ أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ ﴾ ✨",
-    "📖 ﴿ وَقُلْ رَبِّ زِدْنِي عُلَمًا ﴾ 📖",
+    "📖 ﴿ وَقُلْ رَبِّ زِدْنِي عِلْمًا ﴾ 📖",
     "✨ ﴿ وَمَنْ يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ ﴾ ✨",
     "📖 ﴿ إِنَّ اللَّهَ مَعَ الصَّابِرِينَ ﴾ 📖",
     "✨ ﴿ وَإِذَا سَأَلَكَ عِبَادِي عَنِّي فَإِنِّي قَرِيبٌ ﴾ ✨",
@@ -70,9 +60,7 @@ QURAN_VERSES = [
     "📖 ﴿ قُلْ يَا عِبَادِيَ الَّذِينَ أَسْرَفُوا عَلَىٰ أَنْفُسِهِمْ لَا تَقْنَطُوا مِنْ رَحْمَةِ اللَّهِ ﴾ ✨"
 ]
 
-# ==========================================
 # 📋 القوائم
-# ==========================================
 def main_menu():
     keyboard = [
         [KeyboardButton("📥 تحميل"), KeyboardButton("✨ زخرفة")],
@@ -90,18 +78,15 @@ def admin_panel():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ==========================================
-# 📂 إدارة البيانات
-# ==========================================
+# 📂 حفظ المستخدمين
 def save_user(chat_id, name="مستخدم"):
     try:
         with open("users.txt", "a+", encoding="utf-8") as f:
             f.seek(0)
-            users = f.read()
-            if str(chat_id) not in users:
+            if str(chat_id) not in f.read():
                 f.write(f"{chat_id}|{name}\n")
-    except Exception as e:
-        print(f"Error: {e}")
+    except:
+        pass
 
 def get_name(update: Update):
     chat = update.effective_chat
@@ -110,8 +95,6 @@ def get_name(update: Update):
     name = chat.first_name or ""
     if chat.last_name:
         name += " " + chat.last_name
-    if chat.username:
-        name += f" (@{chat.username})"
     return name or "مستخدم"
 
 async def broadcast(bot, msg):
@@ -121,19 +104,16 @@ async def broadcast(bot, msg):
         lines = f.read().splitlines()
     count = 0
     for line in lines:
-        if not line.strip():
-            continue
-        cid = line.split("|")[0]
-        try:
-            await bot.send_message(chat_id=int(cid), text=msg, parse_mode='HTML')
-            count += 1
-        except:
-            pass
+        if line.strip():
+            cid = line.split("|")[0]
+            try:
+                await bot.send_message(chat_id=int(cid), text=msg, parse_mode='HTML')
+                count += 1
+            except:
+                pass
     return count
 
-# ==========================================
 # 🎨 الزخرفة
-# ==========================================
 def decorate(name):
     return "\n".join([
         f"1. 『{name}』",
@@ -146,22 +126,20 @@ def decorate(name):
         f"8. ✦{name}✦"
     ])
 
-# ==========================================
-# 🤖 الأوامر
-# ==========================================
+# 🤖 إعداد الأوامر
 async def post_init(app):
     cmds = [
         BotCommand("start", "بدء التشغيل"),
         BotCommand("help", "المساعدة"),
         BotCommand("admin", "🔐 لوحة تحكم المالك"),
-        BotCommand("info", "معلومات الحساب"),
     ]
     await app.bot.set_my_commands(cmds)
 
+# 👑 أوامر البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.effective_chat.id, get_name(update))
     await update.message.reply_text(
-        "🎯 أهلاً بك في بوت الخدمات!\nاستخدم الأزرار أدناه أو /help للمساعدة.\n\n🔐 للمالك: /admin",
+        "🎯 أهلاً بك في بوت الخدمات!\n\n🔐 للمالك: استخدم /admin",
         reply_markup=main_menu()
     )
 
@@ -169,18 +147,10 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.effective_chat.id, get_name(update))
     await update.message.reply_text(
         "📚 <b>المساعدة:</b>\n\n"
-        "📥 تحميل فيديو - أرسل رابط\n"
-        "🎵 تحميل صوت - اكتب: يوت اسم الأغنية\n"
+        "📥 تحميل - أرسل رابط فيديو\n"
         "✨ زخرفة - اكتب: زخرفة الاسم\n"
-        "🔐 لوحة تحكم - /admin",
+        "🔐 أدمن - /admin",
         reply_markup=main_menu(),
-        parse_mode='HTML'
-    )
-
-async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    await update.message.reply_text(
-        f"👤 الاسم: {user.first_name}\n🆔 الآيدي: <code>{user.id}</code>",
         parse_mode='HTML'
     )
 
@@ -188,22 +158,10 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         await update.message.reply_text("❌ هذا الأمر للمالك فقط!")
         return
-    await update.message.reply_text("🔑 أدخل كلمة المرور:")
-    context.user_data['pass'] = True
+    await update.message.reply_text("🔑 أدخل كلمة المرور (0658):")
+    context.user_data['waiting_pass'] = True
 
-async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        return
-    if os.path.exists("users.txt"):
-        with open("users.txt", "r", encoding="utf-8") as f:
-            lines = f.read().splitlines()
-        await update.message.reply_text(f"📊 إجمالي المستخدمين: {len(lines)}")
-    else:
-        await update.message.reply_text("لا يوجد مستخدمين بعد.")
-
-# ==========================================
 # 🎯 معالج النصوص
-# ==========================================
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -213,40 +171,40 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
 
     # انتظار كلمة المرور
-    if context.user_data.get('pass'):
+    if context.user_data.get('waiting_pass'):
         if text == ADMIN_PASS:
-            context.user_data['pass'] = False
+            context.user_data['waiting_pass'] = False
             await update.message.reply_text(
-                "✅ <b>تم الدخول!</b>\nاختر من القائمة:",
+                "✅ <b>تم الدخول للوحة التحكم!</b>\nاختر من القائمة:",
                 reply_markup=admin_panel(),
                 parse_mode='HTML'
             )
         else:
-            context.user_data['pass'] = False
-            await update.message.reply_text("❌ كلمة مرور خاطئة!")
+            context.user_data['waiting_pass'] = False
+            await update.message.reply_text("❌ كلمة المرور خاطئة!")
         return
 
-    # انتظار البث
-    if context.user_data.get('bc'):
-        context.user_data['bc'] = False
-        msg = await update.message.reply_text("📢 جاري البث...")
+    # انتظار رسالة البث
+    if context.user_data.get('waiting_bc'):
+        context.user_data['waiting_bc'] = False
+        msg = await update.message.reply_text("📢 جاري البث الجماعي...")
         cnt = await broadcast(context.bot, text)
         await msg.edit_text(f"✅ تم البث إلى {cnt} مستخدم!")
         return
 
     # انتظار رقم الآية
-    if context.user_data.get('verse'):
-        context.user_data['verse'] = False
+    if context.user_data.get('waiting_verse'):
+        context.user_data['waiting_verse'] = False
         try:
             n = int(text)
             if 1 <= n <= 30:
                 verse = QURAN_VERSES[n-1]
-                full = f"📖 <b>آية قرآنية</b>\n\n{verse}\n\n🌸 سبحان الله"
+                full = f"✨ 📜 <b>آيَةٌ قُرْآنِيَّةٌ كَرِيمَةٌ</b> 📜 ✨\n\n{verse}\n\n🌸 تأملها واذكر الله"
                 msg = await update.message.reply_text("📖 جاري بث الآية...")
                 cnt = await broadcast(context.bot, full)
                 await msg.edit_text(f"✅ تم بث الآية إلى {cnt} مستخدم!")
             else:
-                await update.message.reply_text("❌ اختر من 1 إلى 30")
+                await update.message.reply_text("❌ اختر رقم من 1 إلى 30")
         except:
             await update.message.reply_text("❌ أدخل رقم صحيح")
         return
@@ -256,13 +214,13 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if uid != OWNER_ID:
             await update.message.reply_text("❌ للمالك فقط!")
             return
-        await update.message.reply_text("🔑 أدخل كلمة المرور:")
-        context.user_data['pass'] = True
+        await update.message.reply_text("🔑 أدخل كلمة المرور (0658):")
+        context.user_data['waiting_pass'] = True
         return
 
     # زر تحميل
     if text == "📥 تحميل":
-        await update.message.reply_text("📥 أرسل رابط الفيديو أو اكتب: يوت اسم الأغنية")
+        await update.message.reply_text("📥 أرسل رابط الفيديو للتحميل\nأو اكتب: يوت اسم الأغنية")
         return
 
     # زر زخرفة
@@ -273,10 +231,13 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # زر معلومات
     if text == "ℹ️ معلومات":
         user = update.effective_user
-        await update.message.reply_text(f"👤 {user.first_name}\n🆔 <code>{user.id}</code>", parse_mode='HTML')
+        await update.message.reply_text(
+            f"👤 الاسم: {user.first_name}\n🆔 الآيدي: <code>{user.id}</code>",
+            parse_mode='HTML'
+        )
         return
 
-    # زخرفة
+    # زخرفة الاسم
     if text.startswith("زخرفة ") or text.startswith("زخرف "):
         parts = text.split(" ", 1)
         if len(parts) > 1 and parts[1].strip():
@@ -287,72 +248,70 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ مثال: زخرفة أحمد")
         return
 
-    # سلام
-    if "سلام" in text or "السلام" in text:
-        name = update.effective_user.first_name
-        await update.message.reply_text(f"✨ وعليكم السلام ورحمة الله وبركاته\nأهلاً {name} 🌸")
-        return
+    # رد على السلام
+    if any(word in text for word in ["سلام", "السلام"]):
+        await update.message.reply_text(
+            f"✨ وعليكم السلام ورحمة الله وبركاته\nأهلاً {update.effective_user.first_name} 🌸"
+        )
 
-# ==========================================
-# 🎯 معالج الأزرار
-# ==========================================
+# 🎯 معالج الأزرار التفاعلية
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
     if query.from_user.id != OWNER_ID:
-        await query.edit_message_text("❌ للمالك فقط!")
+        await query.edit_message_text("❌ هذه الأزرار للمالك فقط!")
         return
 
     data = query.data
 
     if data == "bc":
-        await query.edit_message_text("📢 أرسل رسالة البث الآن:")
-        context.user_data['bc'] = True
+        await query.edit_message_text("📢 أرسل رسالة البث الجماعي الآن:")
+        context.user_data['waiting_bc'] = True
 
     elif data == "verse":
         await query.edit_message_text("📖 أرسل رقم الآية (1-30):")
-        context.user_data['verse'] = True
+        context.user_data['waiting_verse'] = True
 
     elif data == "stats":
         if os.path.exists("users.txt"):
             with open("users.txt", "r", encoding="utf-8") as f:
                 total = len(f.read().splitlines())
-            await query.edit_message_text(f"📊 المستخدمين: {total}")
+            await query.edit_message_text(f"📊 إجمالي المستخدمين: {total}")
         else:
-            await query.edit_message_text("لا يوجد مستخدمين")
+            await query.edit_message_text("📊 لا يوجد مستخدمين بعد")
 
     elif data == "mnt":
         global MAINTENANCE_MODE
         MAINTENANCE_MODE = not MAINTENANCE_MODE
         status = "🔴 مفعل" if MAINTENANCE_MODE else "🟢 معطل"
-        await query.edit_message_text(f"⚙️ الصيانة: {status}")
+        await query.edit_message_text(f"⚙️ وضع الصيانة: {status}")
 
     elif data == "close":
-        await query.edit_message_text("🚫 تم إغلاق اللوحة")
+        await query.edit_message_text("🚫 تم إغلاق لوحة التحكم")
         context.user_data.clear()
 
-# ==========================================
-# 🚀 التشغيل
-# ==========================================
-def main():
-    # تشغيل السيرفر أولاً
-    threading.Thread(target=start_server, daemon=True).start()
-    
-    # بناء التطبيق
+# 🚀 دالة التشغيل الرئيسية
+async def run_bot():
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
     
-    # إضافة المعالجات
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("admin", admin_cmd))
-    app.add_handler(CommandHandler("info", info_cmd))
-    app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     
-    print("🚀 البوت يعمل...")
-    app.run_polling()
+    await app.initialize()
+    await app.start()
+    print("🚀 البوت اشتغل!")
+    await app.updater.start_polling()
+    
+    # يخلي البوت شغال علطول
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    main()
+    # شغل السيرفر
+    threading.Thread(target=start_server, daemon=True).start()
+    # شغل البوت
+    asyncio.run(run_bot())
