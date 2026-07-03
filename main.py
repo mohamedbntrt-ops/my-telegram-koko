@@ -1,330 +1,743 @@
+# -*- coding: utf-8 -*-
+"""
+╔══════════════════════════════════════════════════════════╗
+║          🤖 بوت تليجرام الاحترافي المتكامل V3.0          ║
+║         Telegram Professional Bot - Full Featured        ║
+╚══════════════════════════════════════════════════════════╝
+"""
+
 import os
-import threading
+import re
+import sys
+import json
+import time
+import random
+import string
 import asyncio
+import logging
+import hashlib
+import threading
+import subprocess
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from typing import Optional, Tuple, List, Dict, Any
+from urllib.parse import urlparse
 
-# ⚙️ الإعدادات
-TOKEN = "8702640145:AAHyLv6r3xfyf9x-dptwim6_BrnJSbWYpmY"
-OWNER_ID = 123456789  # ⚠️ غير ده لآيديك الحقيقي
-ADMIN_PASS = "0658"
-MAINTENANCE_MODE = False
+# Telegram imports
+from telegram import (
+    Update, Bot, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup,
+    ReplyKeyboardMarkup, KeyboardButton, ChatPermissions, ChatMember,
+    MessageEntity, InputMediaPhoto, InputMediaVideo, InputMediaDocument,
+    InlineQueryResultArticle, InputTextMessageContent
+)
+from telegram.constants import ParseMode, ChatAction, ChatType
+from telegram.ext import (
+    ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler,
+    CallbackQueryHandler, InlineQueryHandler, ChatMemberHandler,
+    ConversationHandler, filters
+)
+from telegram.error import TelegramError, Forbidden, BadRequest
 
-# 🌐 سيرفر Render - ضروري عشان الموقع مايقفلش
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
-    def log_message(self, format, *args):
-        pass
-
-def start_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    print(f"✅ Server running on port {port}")
-    server.serve_forever()
-
-# 📜 30 آية قرآنية
-QURAN_VERSES = [
-    "✨ ﴿ اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ﴾ ✨",
-    "📖 ﴿ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴾ 📖",
-    "✨ ﴿ أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ ﴾ ✨",
-    "📖 ﴿ وَقُلْ رَبِّ زِدْنِي عِلْمًا ﴾ 📖",
-    "✨ ﴿ وَمَنْ يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ ﴾ ✨",
-    "📖 ﴿ إِنَّ اللَّهَ مَعَ الصَّابِرِينَ ﴾ 📖",
-    "✨ ﴿ وَإِذَا سَأَلَكَ عِبَادِي عَنِّي فَإِنِّي قَرِيبٌ ﴾ ✨",
-    "📖 ﴿ وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰ ﴾ 📖",
-    "✨ ﴿ إِنَّ اللَّهَ وَمَلَائِكَتَهُ يُصَلُّونَ عَلَى النَّبِيِّ ﴾ ✨",
-    "📖 ﴿ فَاذْكُرُونِي أَذْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ ﴾ 📖",
-    "✨ ﴿ لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ﴾ 📖",
-    "📖 ﴿ وَاعْتَصِمُوا بِحَبْلِ اللَّهِ جَمِيعًا وَلَا تَفَرَّقُوا ﴾ ✨",
-    "✨ ﴿ قُلْ هُوَ اللَّهُ أَحَدٌ ﴾ 📖",
-    "📖 ﴿ وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ ﴾ ✨",
-    "✨ ﴿ إِنَّ أَكْرَمَكُمْ عِنْدَ اللَّهِ أَتْقَاكُمْ ﴾ 📖",
-    "📖 ﴿ وَأُفَوِّضُ أَمْرِي إِلَى اللَّهِ ﴾ ✨",
-    "✨ ﴿ وَجَعَلْنَا مِنَ الْمَاءِ كُلَّ شَيْءٍ حَيٍّ ﴾ 📖",
-    "📖 ﴿ فَبِأَيِّ آلَاءِ رَبِّكُمَا تُكَذِّبَانِ ﴾ ✨",
-    "✨ ﴿ هَلْ جَزَاءُ الْإِحْسَانِ إِلَّا الْإِحْسَانُ ﴾ 📖",
-    "📖 ﴿ وَعَسَىٰ أَنْ تَكْرَهُوا شَيْئًا وَهُوَ خَيْرٌ لَكُمْ ﴾ ✨",
-    "✨ ﴿ وَالَّذِينَ جَاهَدُوا فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا ﴾ 📖",
-    "📖 ﴿ رَبَّنَا لَا تُزِغْ قُلُوبَنَا بَعْدَ إِذْ هَدَيْتَنَا ﴾ ✨",
-    "✨ ﴿ وَقُلْ جَاءَ الْحَقُّ وَزَهَقَ الْبَاطِلُ ﴾ 📖",
-    "📖 ﴿ إِنَّ الْحَسَنَاتِ يُذْهِبْنَ السَّيِّئَاتِ ﴾ ✨",
-    "✨ ﴿ وَاخْفِضْ لَهُمَا جَنَاحَ الذُّلِّ مِنَ الرَّحْمَةِ ﴾ 📖",
-    "📖 ﴿ وَلَا تَحْسَبَنَّ اللَّهَ غَافِلًا عَمَّا يَعْمَلُ الظَّالِمُونَ ﴾ ✨",
-    "✨ ﴿ نَبِّئْ عِبَادِي أَنِّي أَنَا الْغَفُورُ الرَّحِيمُ ﴾ 📖",
-    "📖 ﴿ ادْعُونِي أَسْتَجِبْ لَكُمْ ﴾ ✨",
-    "✨ ﴿ وَإِنْ تَعُدُّوا نِعْمَةَ اللَّهِ لَا تُحْصُوهَا ﴾ 📖",
-    "📖 ﴿ قُلْ يَا عِبَادِيَ الَّذِينَ أَسْرَفُوا عَلَىٰ أَنْفُسِهِمْ لَا تَقْنَطُوا مِنْ رَحْمَةِ اللَّهِ ﴾ ✨"
-]
-
-# 📋 القوائم
-def main_menu():
-    keyboard = [
-        [KeyboardButton("📥 تحميل"), KeyboardButton("✨ زخرفة")],
-        [KeyboardButton("👑 أدمن"), KeyboardButton("ℹ️ معلومات")]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-def admin_panel():
-    keyboard = [
-        [InlineKeyboardButton("📢 بث جماعي", callback_data="bc"), 
-         InlineKeyboardButton("📖 بث آية", callback_data="verse")],
-        [InlineKeyboardButton("📊 إحصائيات", callback_data="stats"), 
-         InlineKeyboardButton("⚙️ صيانة", callback_data="mnt")],
-        [InlineKeyboardButton("🚫 إغلاق", callback_data="close")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-# 📂 حفظ المستخدمين
-def save_user(chat_id, name="مستخدم"):
-    try:
-        with open("users.txt", "a+", encoding="utf-8") as f:
-            f.seek(0)
-            if str(chat_id) not in f.read():
-                f.write(f"{chat_id}|{name}\n")
-    except:
-        pass
-
-def get_name(update: Update):
-    chat = update.effective_chat
-    if chat.title:
-        return chat.title
-    name = chat.first_name or ""
-    if chat.last_name:
-        name += " " + chat.last_name
-    return name or "مستخدم"
-
-async def broadcast(bot, msg):
-    if not os.path.exists("users.txt"):
-        return 0
-    with open("users.txt", "r", encoding="utf-8") as f:
-        lines = f.read().splitlines()
-    count = 0
-    for line in lines:
-        if line.strip():
-            cid = line.split("|")[0]
-            try:
-                await bot.send_message(chat_id=int(cid), text=msg, parse_mode='HTML')
-                count += 1
-            except:
-                pass
-    return count
-
-# 🎨 الزخرفة
-def decorate(name):
-    return "\n".join([
-        f"1. 『{name}』",
-        f"2. ♔{name}♔",
-        f"3. ◈{name}◈",
-        f"4. 彡{name}彡",
-        f"5. ♛{name}♛",
-        f"6. ツ{name}ツ",
-        f"7. ✿{name}✿",
-        f"8. ✦{name}✦"
-    ])
-
-# 🤖 إعداد الأوامر
-async def post_init(app):
-    cmds = [
-        BotCommand("start", "بدء التشغيل"),
-        BotCommand("help", "المساعدة"),
-        BotCommand("admin", "🔐 لوحة تحكم الأدمن (للجميع - بكلمة سر)"),
-    ]
-    await app.bot.set_my_commands(cmds)
-
-# 👑 أوامر البوت
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    save_user(update.effective_chat.id, get_name(update))
-    await update.message.reply_text(
-        "🎯 أهلاً بك في بوت الخدمات!\n\n🔐 للدخول للوحة التحكم: استخدم /admin أو اضغط 👑 أدمن",
-        reply_markup=main_menu()
-    )
-
-async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    save_user(update.effective_chat.id, get_name(update))
-    await update.message.reply_text(
-        "📚 <b>المساعدة:</b>\n\n"
-        "📥 تحميل - أرسل رابط فيديو\n"
-        "✨ زخرفة - اكتب: زخرفة الاسم\n"
-        "👑 أدمن - لوحة تحكم بكلمة سر (0658)\n"
-        "🔐 /admin - نفس لوحة التحكم",
-        reply_markup=main_menu(),
-        parse_mode='HTML'
-    )
-
-# ⭐ تم تعديل هذا الأمر - متاح للجميع
-async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    هذا الأمر متاح للجميع
-    لكن مش هيدخل غير بكلمة السر الصح
-    """
-    save_user(update.effective_chat.id, get_name(update))
-    await update.message.reply_text(
-        "🔐 <b>لوحة تحكم الأدمن</b>\n\n"
-        "🔑 <b>أدخل كلمة المرور للمتابعة:</b>\n\n"
-        "⚠️ لديك 60 ثانية فقط",
-        parse_mode='HTML'
-    )
-    context.user_data['waiting_pass'] = True
-
-# 🎯 معالج النصوص
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
+# =============================================
+# ⚙️ CONFIGURATION & SETTINGS
+# =============================================
+class Config:
+    """Central configuration class"""
+    # Bot Core
+    TOKEN = "8702640145:AAHyLv6r3xfyf9x-dptwim6_BrnJSbWYpmY"
+    BOT_NAME = "الأسطورة"
+    BOT_VERSION = "3.0.0"
+    BOT_CREATOR = "@ZADC_Team"
+    BOT_CHANNEL = "@ZADC_Channel"
     
-    save_user(update.effective_chat.id, get_name(update))
-    text = update.message.text.strip()
-    uid = update.effective_user.id
+    # Admin Settings
+    ADMIN_PASS = "0658"
+    OWNER_IDS = [123456789, 987654321]  # Can add multiple owners
+    
+    # File System
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = os.path.join(BASE_DIR, "data")
+    LOGS_DIR = os.path.join(BASE_DIR, "logs")
+    TEMP_DIR = os.path.join(BASE_DIR, "temp")
+    USERS_FILE = os.path.join(DATA_DIR, "users.json")
+    GROUPS_FILE = os.path.join(DATA_DIR, "groups.json")
+    BANS_FILE = os.path.join(DATA_DIR, "bans.json")
+    STATS_FILE = os.path.join(DATA_DIR, "stats.json")
+    SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
+    
+    # Limits
+    MAX_VIDEO_SIZE = 200 * 1024 * 1024  # 200MB
+    MAX_AUDIO_SIZE = 100 * 1024 * 1024  # 100MB
+    MAX_MESSAGE_LENGTH = 4096
+    RATE_LIMIT_SECONDS = 2
+    
+    # Emojis & Decorations
+    EMOJIS = {
+        'success': '✅', 'error': '❌', 'warning': '⚠️', 'info': 'ℹ️',
+        'star': '⭐', 'crown': '👑', 'lock': '🔒', 'key': '🔑',
+        'rocket': '🚀', 'fire': '🔥', 'heart': '❤️', 'broken': '💔',
+        'robot': '🤖', 'ghost': '👻', 'alien': '👽', 'devil': '😈',
+        'angel': '😇', 'clown': '🤡', 'skull': '💀', 'brain': '🧠'
+    }
+    
+    # Colors for terminal
+    COLORS = {
+        'red': '\033[91m', 'green': '\033[92m', 'yellow': '\033[93m',
+        'blue': '\033[94m', 'magenta': '\033[95m', 'cyan': '\033[96m',
+        'white': '\033[97m', 'reset': '\033[0m', 'bold': '\033[1m'
+    }
 
-    # ⭐ انتظار كلمة المرور - متاح للجميع
-    if context.user_data.get('waiting_pass'):
-        if text == ADMIN_PASS:
-            context.user_data['waiting_pass'] = False
-            context.user_data['is_admin'] = True  # تعليم أنه أدمن
-            await update.message.reply_text(
-                "✅ <b>تم الدخول للوحة التحكم!</b>\nاختر من القائمة:",
-                reply_markup=admin_panel(),
-                parse_mode='HTML'
-            )
-        else:
-            context.user_data['waiting_pass'] = False
-            await update.message.reply_text("❌ كلمة المرور خاطئة! تم إلغاء المحاولة.")
-        return
+# Initialize config
+config = Config()
 
-    # ⭐ انتظار رسالة البث - متاح لأي شخص دخل بكلمة السر
-    if context.user_data.get('waiting_bc') and context.user_data.get('is_admin'):
-        context.user_data['waiting_bc'] = False
-        msg = await update.message.reply_text("📢 جاري البث الجماعي...")
-        cnt = await broadcast(context.bot, text)
-        await msg.edit_text(f"✅ تم البث إلى {cnt} مستخدم!")
-        return
+# =============================================
+# 🛡️ SECURITY & UTILITIES
+# =============================================
+class SecurityManager:
+    """Handles all security related operations"""
+    
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """Hash password with SHA256"""
+        return hashlib.sha256(f"{password}_salt_ZADC_2024".encode()).hexdigest()
+    
+    @staticmethod
+    def verify_password(password: str, hashed: str) -> bool:
+        """Verify password against hash"""
+        return SecurityManager.hash_password(password) == hashed
+    
+    @staticmethod
+    def generate_token(length: int = 32) -> str:
+        """Generate secure random token"""
+        return ''.join(random.choices(string.ascii_letters + string.digits + "!@#$%^&*", k=length))
+    
+    @staticmethod
+    def sanitize_input(text: str) -> str:
+        """Sanitize user input"""
+        # Remove HTML tags
+        text = re.sub(r'<[^>]*>', '', text)
+        # Remove potential SQL injection
+        text = text.replace("'", "''")
+        # Remove control characters
+        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+        return text.strip()
 
-    # ⭐ انتظار رقم الآية - متاح لأي شخص دخل بكلمة السر
-    if context.user_data.get('waiting_verse') and context.user_data.get('is_admin'):
-        context.user_data['waiting_verse'] = False
+class Database:
+    """Simple JSON-based database system"""
+    
+    @staticmethod
+    def ensure_files():
+        """Create necessary directories and files"""
+        for directory in [config.DATA_DIR, config.LOGS_DIR, config.TEMP_DIR]:
+            os.makedirs(directory, exist_ok=True)
+        
+        default_data = {
+            config.USERS_FILE: {},
+            config.GROUPS_FILE: {},
+            config.BANS_FILE: [],
+            config.STATS_FILE: {
+                "total_users": 0,
+                "total_groups": 0,
+                "total_messages": 0,
+                "commands_used": {},
+                "daily_active": {},
+                "start_date": datetime.now().isoformat()
+            },
+            config.SETTINGS_FILE: {
+                "maintenance": False,
+                "antispam": True,
+                "max_warns": 3,
+                "mute_duration": 3600
+            }
+        }
+        
+        for filepath, default in default_data.items():
+            if not os.path.exists(filepath):
+                Database.save(filepath, default)
+    
+    @staticmethod
+    def load(filepath: str) -> Any:
+        """Load data from JSON file"""
         try:
-            n = int(text)
-            if 1 <= n <= 30:
-                verse = QURAN_VERSES[n-1]
-                full = f"✨ 📜 <b>آيَةٌ قُرْآنِيَّةٌ كَرِيمَةٌ</b> 📜 ✨\n\n{verse}\n\n🌸 تأملها واذكر الله"
-                msg = await update.message.reply_text("📖 جاري بث الآية...")
-                cnt = await broadcast(context.bot, full)
-                await msg.edit_text(f"✅ تم بث الآية إلى {cnt} مستخدم!")
-            else:
-                await update.message.reply_text("❌ اختر رقم من 1 إلى 30")
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return json.load(f)
         except:
-            await update.message.reply_text("❌ أدخل رقم صحيح")
-        return
+            return {}
+    
+    @staticmethod
+    def save(filepath: str, data: Any):
+        """Save data to JSON file"""
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    
+    @staticmethod
+    def update_user(user_id: int, data: dict):
+        """Update user data"""
+        users = Database.load(config.USERS_FILE)
+        if str(user_id) not in users:
+            users[str(user_id)] = {
+                "first_seen": datetime.now().isoformat(),
+                "messages": 0,
+                "warns": 0
+            }
+        users[str(user_id)].update(data)
+        users[str(user_id)]["last_seen"] = datetime.now().isoformat()
+        Database.save(config.USERS_FILE, users)
+    
+    @staticmethod
+    def get_user(user_id: int) -> dict:
+        """Get user data"""
+        users = Database.load(config.USERS_FILE)
+        return users.get(str(user_id), {})
 
-    # ⭐ زر أدمن - متاح للجميع
-    if text == "👑 أدمن":
-        await update.message.reply_text(
-            "🔐 <b>لوحة تحكم الأدمن</b>\n\n"
-            "🔑 <b>أدخل كلمة المرور للمتابعة:</b>\n\n"
-            "⚠️ لديك 60 ثانية فقط",
-            parse_mode='HTML'
-        )
-        context.user_data['waiting_pass'] = True
-        return
+class Decorations:
+    """All decorative elements for messages"""
+    
+    @staticmethod
+    def header(title: str) -> str:
+        return f"""
+╔══════════════════════════════╗
+║   ✨ {title} ✨
+╚══════════════════════════════╝
+"""
+    
+    @staticmethod
+    def footer() -> str:
+        return f"""
+╚══════════════════════════════╝
+🤖 {config.BOT_NAME} v{config.BOT_VERSION}
+📢 {config.BOT_CHANNEL}
+"""
+    
+    @staticmethod
+    def progress_bar(percent: int, length: int = 20) -> str:
+        filled = int(length * percent / 100)
+        bar = '█' * filled + '░' * (length - filled)
+        return f"[{bar}] {percent}%"
+    
+    @staticmethod
+    def random_emoji() -> str:
+        return random.choice(list(config.EMOJIS.values()))
 
-    # زر تحميل
-    if text == "📥 تحميل":
-        await update.message.reply_text("📥 أرسل رابط الفيديو للتحميل\nأو اكتب: يوت اسم الأغنية")
-        return
-
-    # زر زخرفة
-    if text == "✨ زخرفة":
-        await update.message.reply_text("✨ اكتب: زخرفة [الاسم]\nمثال: زخرفة محمد")
-        return
-
-    # زر معلومات
-    if text == "ℹ️ معلومات":
-        user = update.effective_user
-        await update.message.reply_text(
-            f"👤 الاسم: {user.first_name}\n🆔 الآيدي: <code>{user.id}</code>",
-            parse_mode='HTML'
-        )
-        return
-
-    # زخرفة الاسم
-    if text.startswith("زخرفة ") or text.startswith("زخرف "):
-        parts = text.split(" ", 1)
-        if len(parts) > 1 and parts[1].strip():
-            name = parts[1].strip()
-            result = f"✨ <b>زخرفة: {name}</b>\n\n{decorate(name)}"
-            await update.message.reply_text(result, parse_mode='HTML')
+class TimeUtils:
+    """Time-related utilities"""
+    
+    @staticmethod
+    def get_current_time() -> str:
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    @staticmethod
+    def format_timestamp(timestamp: float) -> str:
+        dt = datetime.fromtimestamp(timestamp)
+        return dt.strftime("%I:%M %p - %d/%m/%Y")
+    
+    @staticmethod
+    def time_ago(dt: datetime) -> str:
+        now = datetime.now(timezone.utc)
+        diff = now - dt
+        
+        if diff.days > 365:
+            return f"{diff.days // 365} سنة"
+        elif diff.days > 30:
+            return f"{diff.days // 30} شهر"
+        elif diff.days > 0:
+            return f"{diff.days} يوم"
+        elif diff.seconds > 3600:
+            return f"{diff.seconds // 3600} ساعة"
+        elif diff.seconds > 60:
+            return f"{diff.seconds // 60} دقيقة"
         else:
-            await update.message.reply_text("❌ مثال: زخرفة أحمد")
-        return
-
-    # رد على السلام
-    if any(word in text for word in ["سلام", "السلام"]):
-        await update.message.reply_text(
-            f"✨ وعليكم السلام ورحمة الله وبركاته\nأهلاً {update.effective_user.first_name} 🌸"
-        )
-
-# 🎯 معالج الأزرار التفاعلية - متاح لأي شخص دخل بكلمة السر
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+            return f"{diff.seconds} ثانية"
     
-    # ⭐ التحقق من أنه دخل بكلمة السر الصح
-    if not context.user_data.get('is_admin'):
-        await query.edit_message_text("❌ يجب تسجيل الدخول أولاً! استخدم /admin")
-        return
+    @staticmethod
+    def format_duration(seconds: int) -> str:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        
+        parts = []
+        if hours > 0:
+            parts.append(f"{hours}h")
+        if minutes > 0:
+            parts.append(f"{minutes}m")
+        if secs > 0 or not parts:
+            parts.append(f"{secs}s")
+        
+        return " ".join(parts)
 
-    data = query.data
+class StringUtils:
+    """String manipulation utilities"""
+    
+    @staticmethod
+    def truncate(text: str, length: int = 100) -> str:
+        return text[:length] + "..." if len(text) > length else text
+    
+    @staticmethod
+    def random_string(length: int = 10) -> str:
+        return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+    
+    @staticmethod
+    def is_valid_url(url: str) -> bool:
+        try:
+            result = urlparse(url)
+            return all([result.scheme, result.netloc])
+        except:
+            return False
+    
+    @staticmethod
+    def extract_urls(text: str) -> List[str]:
+        url_pattern = r'https?://\S+'
+        return re.findall(url_pattern, text)
 
-    if data == "bc":
-        await query.edit_message_text("📢 أرسل رسالة البث الجماعي الآن:")
-        context.user_data['waiting_bc'] = True
-
-    elif data == "verse":
-        await query.edit_message_text("📖 أرسل رقم الآية (1-30):")
-        context.user_data['waiting_verse'] = True
-
-    elif data == "stats":
-        if os.path.exists("users.txt"):
-            with open("users.txt", "r", encoding="utf-8") as f:
-                total = len(f.read().splitlines())
-            await query.edit_message_text(f"📊 إجمالي المستخدمين: {total}")
+# =============================================
+# 🎨 NAME DECORATION SYSTEM
+# =============================================
+class NameDecorator:
+    """Professional name decoration system"""
+    
+    # 100+ decoration styles
+    STYLES = {
+        'arabic': [
+            "『{name}』", "「{name}」", "【{name}】", "《{name}》",
+            "﴿{name}﴾", "۞{name}۞", "❀{name}❀", "✿{name}✿",
+            "『♚』{name}『♚』", "『★』{name}『★』"
+        ],
+        'crowns': [
+            "♔{name}♔", "♕{name}♕", "♛{name}♛", "♚{name}♚",
+            "👑{name}👑", "👑『{name}』👑", "♛『{name}』♛"
+        ],
+        'wings': [
+            "༺{name}༻", "༺☆{name}☆༻", "彡{name}彡",
+            "ζ{name}ζ", "↭{name}↭", "『』{name}『』"
+        ],
+        'stars': [
+            "★{name}★", "☆{name}☆", "✦{name}✦", "✧{name}✧",
+            "⭐{name}⭐", "🌟{name}🌟", "✨{name}✨"
+        ],
+        'hearts': [
+            "❤️{name}❤️", "💕{name}💕", "💗{name}💗",
+            "💝{name}💝", "♥{name}♥", "♡{name}♡"
+        ],
+        'fire': [
+            "🔥{name}🔥", "『🔥』{name}『🔥』", "☠️{name}☠️",
+            "💀{name}💀", "⚡{name}⚡"
+        ],
+        'gaming': [
+            "『G』{name}", "『VIP』{name}", "『PRO』{name}",
+            "【VIP】{name}", "〖PRO〗{name}", "『LEGEND』{name}"
+        ],
+        'special': [
+            "◈{name}◈", "◆{name}◆", "◇{name}◇", "◉{name}◉",
+            "◎{name}◎", "●{name}●", "○{name}○", "■{name}■"
+        ],
+        'animals': [
+            "🐉{name}🐉", "🦅{name}🦅", "🦊{name}🦊",
+            "🐺{name}🐺", "🦁{name}🦁", "🐯{name}🐯"
+        ],
+        'mixed': [
+            "★彡{name}彡★", "♛★{name}★♛", "☆彡{name}彡☆",
+            "❤️★{name}★❤️", "⚡彡{name}彡⚡"
+        ]
+    }
+    
+    @staticmethod
+    def decorate(name: str, category: str = None) -> str:
+        """Decorate name with specified or random style"""
+        name = name.strip()
+        if not name:
+            return "❌ Please enter a name"
+        
+        results = []
+        
+        if category and category in NameDecorator.STYLES:
+            styles = NameDecorator.STYLES[category]
+            results = [style.format(name=name) for style in styles]
         else:
-            await query.edit_message_text("📊 لا يوجد مستخدمين بعد")
-
-    elif data == "mnt":
-        global MAINTENANCE_MODE
-        MAINTENANCE_MODE = not MAINTENANCE_MODE
-        status = "🔴 مفعل" if MAINTENANCE_MODE else "🟢 معطل"
-        await query.edit_message_text(f"⚙️ وضع الصيانة: {status}")
-
-    elif data == "close":
-        await query.edit_message_text("🚫 تم إغلاق لوحة التحكم")
-        context.user_data.clear()
-
-# 🚀 دالة التشغيل الرئيسية
-async def run_bot():
-    app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
+            # Return all styles organized by category
+            for cat, styles in NameDecorator.STYLES.items():
+                results.append(f"\n{'='*30}\n📌 {cat.upper()}\n{'='*30}")
+                results.extend([f"{i+1}. {style.format(name=name)}" 
+                              for i, style in enumerate(styles)])
+        
+        return '\n'.join(results)
     
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
-    app.add_handler(CommandHandler("admin", admin_cmd))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-    
-    await app.initialize()
-    await app.start()
-    print("🚀 البوت اشتغل!")
-    await app.updater.start_polling()
-    
-    # يخلي البوت شغال علطول
-    while True:
-        await asyncio.sleep(3600)
+    @staticmethod
+    def advanced_decorate(name: str) -> str:
+        """Advanced decoration with multiple formats"""
+        decorations = []
+        
+        # Simple decorations
+        decorations.append(f"1. 『{name}』")
+        decorations.append(f"2. 【{name}】")
+        decorations.append(f"3. 「{name}」")
+        
+        # With symbols
+        decorations.append(f"4. ★{name}★")
+        decorations.append(f"5. ✦{name}✦")
+        decorations.append(f"6. ♔{name}♔")
+        
+        # Complex
+        decorations.append(f"7. 『★』{name}『★』")
+        decorations.append(f"8. ♛『{name}』♛")
+        decorations.append(f"9. 彡★{name}★彡")
+        
+        # Emoji
+        decorations.append(f"10. 👑{name}👑")
+        decorations.append(f"11. 🔥{name}🔥")
+        decorations.append(f"12. ⚡{name}⚡")
+        
+        # Gaming
+        decorations.append(f"13. [VIP] {name}")
+        decorations.append(f"14. {name} | PRO")
+        decorations.append(f"15. 『{name}』✓")
+        
+        # Special fonts
+        decorations.append(f"16. ➤ {name}")
+        decorations.append(f"17. • {name} •")
+        decorations.append(f"18. ◈ {name} ◈")
+        
+        return '\n'.join(decorations)
 
-if __name__ == "__main__":
-    # شغل السيرفر
-    threading.Thread(target=start_server, daemon=True).start()
-    # شغل البوت
-    asyncio.run(run_bot())
+# =============================================
+# 📜 QURAN & RELIGIOUS CONTENT
+# =============================================
+class ReligiousContent:
+    """Quran verses and religious content"""
+    
+    QURAN_VERSES = [
+        {"text": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ", "surah": "البقرة", "ayah": 255},
+        {"text": "إِنَّ مَعَ الْعُسْرِ يُسْرًا", "surah": "الشرح", "ayah": 6},
+        {"text": "أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ", "surah": "الرعد", "ayah": 28},
+        {"text": "وَقُلْ رَبِّ زِدْنِي عِلْمًا", "surah": "طه", "ayah": 114},
+        {"text": "وَمَنْ يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ", "surah": "الطلاق", "ayah": 3},
+        {"text": "إِنَّ اللَّهَ مَعَ الصَّابِرِينَ", "surah": "البقرة", "ayah": 153},
+        {"text": "وَإِذَا سَأَلَكَ عِبَادِي عَنِّي فَإِنِّي قَرِيبٌ", "surah": "البقرة", "ayah": 186},
+        {"text": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰ", "surah": "الضحى", "ayah": 5},
+        {"text": "إِنَّ اللَّهَ وَمَلَائِكَتَهُ يُصَلُّونَ عَلَى النَّبِيِّ", "surah": "الأحزاب", "ayah": 56},
+        {"text": "فَاذْكُرُونِي أَذْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ", "surah": "البقرة", "ayah": 152},
+        {"text": "لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا", "surah": "البقرة", "ayah": 286},
+        {"text": "وَاعْتَصِمُوا بِحَبْلِ اللَّهِ جَمِيعًا وَلَا تَفَرَّقُوا", "surah": "آل عمران", "ayah": 103},
+        {"text": "قُلْ هُوَ اللَّهُ أَحَدٌ", "surah": "الإخلاص", "ayah": 1},
+        {"text": "وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ", "surah": "هود", "ayah": 88},
+        {"text": "إِنَّ أَكْرَمَكُمْ عِنْدَ اللَّهِ أَتْقَاكُمْ", "surah": "الحجرات", "ayah": 13},
+        {"text": "وَأُفَوِّضُ أَمْرِي إِلَى اللَّهِ", "surah": "غافر", "ayah": 44},
+        {"text": "فَبِأَيِّ آلَاءِ رَبِّكُمَا تُكَذِّبَانِ", "surah": "الرحمن", "ayah": 13},
+        {"text": "هَلْ جَزَاءُ الْإِحْسَانِ إِلَّا الْإِحْسَانُ", "surah": "الرحمن", "ayah": 60},
+        {"text": "وَعَسَىٰ أَنْ تَكْرَهُوا شَيْئًا وَهُوَ خَيْرٌ لَكُمْ", "surah": "البقرة", "ayah": 216},
+        {"text": "وَالَّذِينَ جَاهَدُوا فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا", "surah": "العنكبوت", "ayah": 69},
+        {"text": "رَبَّنَا لَا تُزِغْ قُلُوبَنَا بَعْدَ إِذْ هَدَيْتَنَا", "surah": "آل عمران", "ayah": 8},
+        {"text": "وَقُلْ جَاءَ الْحَقُّ وَزَهَقَ الْبَاطِلُ", "surah": "الإسراء", "ayah": 81},
+        {"text": "إِنَّ الْحَسَنَاتِ يُذْهِبْنَ السَّيِّئَاتِ", "surah": "هود", "ayah": 114},
+        {"text": "وَاخْفِضْ لَهُمَا جَنَاحَ الذُّلِّ مِنَ الرَّحْمَةِ", "surah": "الإسراء", "ayah": 24},
+        {"text": "وَلَا تَحْسَبَنَّ اللَّهَ غَافِلًا عَمَّا يَعْمَلُ الظَّالِمُونَ", "surah": "إبراهيم", "ayah": 42},
+        {"text": "نَبِّئْ عِبَادِي أَنِّي أَنَا الْغَفُورُ الرَّحِيمُ", "surah": "الحجر", "ayah": 49},
+        {"text": "ادْعُونِي أَسْتَجِبْ لَكُمْ", "surah": "غافر", "ayah": 60},
+        {"text": "وَإِنْ تَعُدُّوا نِعْمَةَ اللَّهِ لَا تُحْصُوهَا", "surah": "إبراهيم", "ayah": 34},
+        {"text": "قُلْ يَا عِبَادِيَ الَّذِينَ أَسْرَفُوا عَلَىٰ أَنْفُسِهِمْ لَا تَقْنَطُوا مِنْ رَحْمَةِ اللَّهِ", "surah": "الزمر", "ayah": 53},
+        {"text": "إِنَّ الصَّلَاةَ تَنْهَىٰ عَنِ الْفَحْشَاءِ وَالْمُنْكَرِ", "surah": "العنكبوت", "ayah": 45}
+    ]
+    
+    ADHKAR = [
+        "سبحان الله وبحمده، سبحان الله العظيم",
+        "لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير",
+        "سبحان الله، والحمد لله، ولا إله إلا الله، والله أكبر",
+        "أستغفر الله العظيم الذي لا إله إلا هو الحي القيوم وأتوب إليه",
+        "اللهم صل وسلم على نبينا محمد",
+        "لا حول ولا قوة إلا بالله",
+        "حسبي الله لا إله إلا هو عليه توكلت وهو رب العرش العظيم",
+        "اللهم إني أسألك العفو والعافية في الدنيا والآخرة"
+    ]
+    
+    @staticmethod
+    def get_random_verse() -> dict:
+        return random.choice(ReligiousContent.QURAN_VERSES)
+    
+    @staticmethod
+    def format_verse(verse: dict) -> str:
+        return f"""
+╔══════════════════════════════╗
+║     📖 آيَةٌ قُرْآنِيَّةٌ     ║
+╚══════════════════════════════╝
+
+✨ ﴿ {verse['text']} ﴾ ✨
+
+═══════════════════════════════
+📖 سورة {verse['surah']} - آية {verse['ayah']}
+═══════════════════════════════
+
+🌸 تأملوها واذكروا الله العظيم
+"""
+    
+    @staticmethod
+    def get_random_dhikr() -> str:
+        return random.choice(ReligiousContent.ADHKAR)
+
+# =============================================
+# 💬 WELCOME SYSTEM
+# =============================================
+class WelcomeSystem:
+    """Advanced welcome system with multiple styles"""
+    
+    @staticmethod
+    def get_welcome_style(user_name: str, user_id: int, group_name: str = "المجموعة") -> tuple:
+        """Return (text, style_type)"""
+        
+        styles = []
+        
+        # Style 1: Royal Welcome
+        styles.append((f"""
+╔══════════════════════════════════╗
+║     👑 تَرْحِيبٌ مَلَكِيٌّ 👑     ║
+╚══════════════════════════════════╝
+
+✨ أهلاً وسهلاً بك يا ملك في {group_name}
+
+👤 <b>العضو الكريم:</b> {user_name}
+🆔 <b>الآيدي:</b> <code>{user_id}</code>
+📅 <b>التاريخ:</b> {datetime.now().strftime('%Y/%m/%d')}
+
+🎉 نورت المكان وشرفتنا بقدومك
+🌸 نتمنى لك أوقاتاً سعيدة معنا
+
+═══════════════════════════════════
+""", "royal"))
+        
+        # Style 2: Modern Tech
+        styles.append((f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━━━╮
+┃   🤖 تَرْحِيبٌ تِقَنِيٌّ   ┃
+╰━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+👋 Hey {user_name}!
+
+📌 Welcome to {group_name}
+🆔 ID: <code>{user_id}</code>
+
+✅ Enjoy your stay!
+✅ Follow the rules!
+✅ Have fun!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+""", "tech"))
+        
+        # Style 3: Arabic Elegant
+        styles.append((f"""
+✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦
+
+     أهلًا بِالضَّيْفِ العَزِيز
+     
+     {user_name}
+     
+     فِي قُلُوبِنَا مَنْزِلَتُك
+     
+✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦
+
+📋 <b>الآيدي:</b> <code>{user_id}</code>
+📅 <b>التاريخ:</b> {datetime.now().strftime('%d/%m/%Y')}
+""", "arabic"))
+        
+        # Style 4: Minimal
+        styles.append((f"""
+━━━━━━━━━━━━━━━━━━
+✨ Welcome ✨
+
+{user_name}
+
+━━━━━━━━━━━━━━━━━━
+""", "minimal"))
+        
+        # Style 5: Gaming Style
+        styles.append((f"""
+🎮 ••●•• ●••● ••●•• 🎮
+
+  Player Joined!
+  
+  [{user_name}]
+  
+  Level: Legend 🔥
+  ID: {user_id}
+
+🎮 ••●•• ●••● ••●•• 🎮
+""", "gaming"))
+        
+        return random.choice(styles)
+    
+    @staticmethod
+    def get_goodbye_message(user_name: str) -> str:
+        messages = [
+            f"😢 مع السلامة {user_name}، نتمنى عودتك قريباً",
+            f"👋 باي باي {user_name}، فُقدت",
+            f"💔 للأسف {user_name} غادر، سنفتقدك",
+            f"🚶‍♂️ {user_name} قرر المغادرة، بالتوفيق"
+        ]
+        return random.choice(messages)
+
+# =============================================
+# 🎨 KEYBOARD & UI SYSTEM
+# =============================================
+class KeyboardSystem:
+    """Advanced keyboard and UI system"""
+    
+    @staticmethod
+    def get_main_menu() -> ReplyKeyboardMarkup:
+        keyboard = [
+            [KeyboardButton("📥 تحميل فيديو"), KeyboardButton("🎵 تحميل صوت")],
+            [KeyboardButton("✨ زخرفة اسم"), KeyboardButton("📖 آية قرآنية")],
+            [KeyboardButton("👑 لوحة التحكم"), KeyboardButton("ℹ️ معلومات")],
+            [KeyboardButton("📊 إحصائيات"), KeyboardButton("⚙️ إعدادات")]
+        ]
+        return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    @staticmethod
+    def get_admin_panel() -> InlineKeyboardMarkup:
+        keyboard = [
+            [
+                InlineKeyboardButton("📢 بث جماعي", callback_data="admin_broadcast"),
+                InlineKeyboardButton("📖 بث آية", callback_data="admin_verse")
+            ],
+            [
+                InlineKeyboardButton("📊 إحصائيات كاملة", callback_data="admin_stats"),
+                InlineKeyboardButton("👥 قائمة المستخدمين", callback_data="admin_users")
+            ],
+            [
+                InlineKeyboardButton("🔨 حظر مستخدم", callback_data="admin_ban"),
+                InlineKeyboardButton("🔇 كتم مستخدم", callback_data="admin_mute")
+            ],
+            [
+                InlineKeyboardButton("⚙️ وضع الصيانة", callback_data="admin_maintenance"),
+                InlineKeyboardButton("🔄 إعادة تشغيل", callback_data="admin_restart")
+            ],
+            [
+                InlineKeyboardButton("📨 رسالة لمستخدم", callback_data="admin_message"),
+                InlineKeyboardButton("🔑 تغيير كلمة السر", callback_data="admin_changepass")
+            ],
+            [InlineKeyboardButton("🚫 إغلاق اللوحة", callback_data="admin_close")]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def get_decoration_menu() -> InlineKeyboardMarkup:
+        keyboard = [
+            [
+                InlineKeyboardButton("👑 ملوكي", callback_data="deco_crowns"),
+                InlineKeyboardButton("⭐ نجوم", callback_data="deco_stars")
+            ],
+            [
+                InlineKeyboardButton("❤️ قلوب", callback_data="deco_hearts"),
+                InlineKeyboardButton("🔥 ناري", callback_data="deco_fire")
+            ],
+            [
+                InlineKeyboardButton("🎮 Gaming", callback_data="deco_gaming"),
+                InlineKeyboardButton("🦅 حيوانات", callback_data="deco_animals")
+            ],
+            [
+                InlineKeyboardButton("✨ متقدم", callback_data="deco_advanced"),
+                InlineKeyboardButton("🔀 عشوائي", callback_data="deco_random")
+            ]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+
+# =============================================
+# 📊 STATISTICS TRACKER
+# =============================================
+class StatsTracker:
+    """Tracks bot statistics"""
+    
+    @staticmethod
+    def record_command(command: str):
+        stats = Database.load(config.STATS_FILE)
+        stats["commands_used"][command] = stats["commands_used"].get(command, 0) + 1
+        stats["total_messages"] += 1
+        Database.save(config.STATS_FILE, stats)
+    
+    @staticmethod
+    def record_user_activity(user_id: int):
+        today = datetime.now().strftime("%Y-%m-%d")
+        stats = Database.load(config.STATS_FILE)
+        if today not in stats["daily_active"]:
+            stats["daily_active"][today] = []
+        if user_id not in stats["daily_active"][today]:
+            stats["daily_active"][today].append(user_id)
+        Database.save(config.STATS_FILE, stats)
+    
+    @staticmethod
+    def get_stats() -> dict:
+        return Database.load(config.STATS_FILE)
+    
+    @staticmethod
+    def format_stats() -> str:
+        stats = Database.load(config.STATS_FILE)
+        users = Database.load(config.USERS_FILE)
+        groups = Database.load(config.GROUPS_FILE)
+        
+        return f"""
+╔══════════════════════════════╗
+║     📊 إحصائيات البوت        ║
+╚══════════════════════════════╝
+
+👥 إجمالي المستخدمين: {len(users)}
+👥 إجمالي المجموعات: {len(groups)}
+💬 إجمالي الرسائل: {stats.get('total_messages', 0)}
+📅 تاريخ البدء: {stats.get('start_date', 'غير معروف')[:10]}
+
+═══════════════════════════════
+
+📈 أكثر الأوامر استخداماً:
+{chr(10).join([f'  • {cmd}: {count}' for cmd, count in sorted(stats.get('commands_used', {}).items(), key=lambda x: x[1], reverse=True)[:5]])}
+
+═══════════════════════════════
+
+📊 النشاط اليومي:
+{chr(10).join([f'  • {date}: {len(users)} مستخدم' for date, users in sorted(stats.get('daily_active', {}).items(), reverse=True)[:7]])}
+
+═══════════════════════════════
+🚀 {config.BOT_NAME} v{config.BOT_VERSION}
+"""
+    
+    @staticmethod
+    def format_users_list(page: int = 1, per_page: int = 10) -> str:
+        users = Database.load(config.USERS_FILE)
+        user_items = list(users.items())
+        total_pages = max(1, (len(user_items) + per_page - 1) // per_page)
+        
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_users = user_items[start:end]
+        
+        text = f"👥 قائمة المستخدمين (صفحة {page}/{total_pages})\n\n"
+        for i, (uid, data) in enumerate(page_users, start + 1):
+            text += f"{i}. <code>{uid}</code> | {data.get('name', 'مستخدم')}\n"
+        
+        return text
+
+# =============================================
+# 🤖 BOT HANDLERS
+# =============================================
+
+# Initialize bot
+async def post_init(application):
+    """Setup bot commands and initial configuration"""
+    Database.ensure_files()
+    
+    commands = [
+        BotCommand("start", "🚀 بدء التشغيل"),
+        BotCommand("help", "📚 قائمة المساعدة"),
+        BotCommand("admin", "👑 لوحة التحكم"),
+        BotCommand("quran", "📖 آية قرآنية عشوائية"),
+        BotCommand("decorate", "✨ زخرفة اسم"),
+        BotCommand("stats", "📊 إحصائيات البوت"),
+        BotCommand("info", "ℹ️ معلومات عن البوت"),
+        BotCommand("settings", "⚙️ الإعدادات"),
+        BotCommand("support", "🆘 الدعم الفني"),
+    ]
+    
+    await application.bot.set_my_commands(commands)
+    
+    # Log startup
+    print(f"""
+{config.COLORS['cyan']}
+╔══════════════════════════════════════════╗
+║   🤖 Bot Started Successfully           ║
+║   Name: {config.BOT_NAME}                        ║
+║   Version: {config.BOT_VERSION}                       ║
+║   Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}       
