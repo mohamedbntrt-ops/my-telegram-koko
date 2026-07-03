@@ -7,7 +7,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 
 # ⚙️ الإعدادات
 TOKEN = "8702640145:AAHyLv6r3xfyf9x-dptwim6_BrnJSbWYpmY"
-OWNER_ID = 8038919535  # ⚠️ غير ده لآيديك الحقيقي
+OWNER_ID = 123456789  # ⚠️ غير ده لآيديك الحقيقي
 ADMIN_PASS = "0658"
 MAINTENANCE_MODE = False
 
@@ -131,7 +131,7 @@ async def post_init(app):
     cmds = [
         BotCommand("start", "بدء التشغيل"),
         BotCommand("help", "المساعدة"),
-        BotCommand("admin", "🔐 لوحة تحكم المالك"),
+        BotCommand("admin", "🔐 لوحة تحكم الأدمن (للجميع - بكلمة سر)"),
     ]
     await app.bot.set_my_commands(cmds)
 
@@ -139,7 +139,7 @@ async def post_init(app):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.effective_chat.id, get_name(update))
     await update.message.reply_text(
-        "🎯 أهلاً بك في بوت الخدمات!\n\n🔐 للمالك: استخدم /admin",
+        "🎯 أهلاً بك في بوت الخدمات!\n\n🔐 للدخول للوحة التحكم: استخدم /admin أو اضغط 👑 أدمن",
         reply_markup=main_menu()
     )
 
@@ -149,16 +149,25 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📚 <b>المساعدة:</b>\n\n"
         "📥 تحميل - أرسل رابط فيديو\n"
         "✨ زخرفة - اكتب: زخرفة الاسم\n"
-        "🔐 أدمن - /admin",
+        "👑 أدمن - لوحة تحكم بكلمة سر (0658)\n"
+        "🔐 /admin - نفس لوحة التحكم",
         reply_markup=main_menu(),
         parse_mode='HTML'
     )
 
+# ⭐ تم تعديل هذا الأمر - متاح للجميع
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("❌ هذا الأمر للمالك فقط!")
-        return
-    await update.message.reply_text("🔑 أدخل كلمة المرور (0658):")
+    """
+    هذا الأمر متاح للجميع
+    لكن مش هيدخل غير بكلمة السر الصح
+    """
+    save_user(update.effective_chat.id, get_name(update))
+    await update.message.reply_text(
+        "🔐 <b>لوحة تحكم الأدمن</b>\n\n"
+        "🔑 <b>أدخل كلمة المرور للمتابعة:</b>\n\n"
+        "⚠️ لديك 60 ثانية فقط",
+        parse_mode='HTML'
+    )
     context.user_data['waiting_pass'] = True
 
 # 🎯 معالج النصوص
@@ -170,10 +179,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     uid = update.effective_user.id
 
-    # انتظار كلمة المرور
+    # ⭐ انتظار كلمة المرور - متاح للجميع
     if context.user_data.get('waiting_pass'):
         if text == ADMIN_PASS:
             context.user_data['waiting_pass'] = False
+            context.user_data['is_admin'] = True  # تعليم أنه أدمن
             await update.message.reply_text(
                 "✅ <b>تم الدخول للوحة التحكم!</b>\nاختر من القائمة:",
                 reply_markup=admin_panel(),
@@ -181,19 +191,19 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             context.user_data['waiting_pass'] = False
-            await update.message.reply_text("❌ كلمة المرور خاطئة!")
+            await update.message.reply_text("❌ كلمة المرور خاطئة! تم إلغاء المحاولة.")
         return
 
-    # انتظار رسالة البث
-    if context.user_data.get('waiting_bc'):
+    # ⭐ انتظار رسالة البث - متاح لأي شخص دخل بكلمة السر
+    if context.user_data.get('waiting_bc') and context.user_data.get('is_admin'):
         context.user_data['waiting_bc'] = False
         msg = await update.message.reply_text("📢 جاري البث الجماعي...")
         cnt = await broadcast(context.bot, text)
         await msg.edit_text(f"✅ تم البث إلى {cnt} مستخدم!")
         return
 
-    # انتظار رقم الآية
-    if context.user_data.get('waiting_verse'):
+    # ⭐ انتظار رقم الآية - متاح لأي شخص دخل بكلمة السر
+    if context.user_data.get('waiting_verse') and context.user_data.get('is_admin'):
         context.user_data['waiting_verse'] = False
         try:
             n = int(text)
@@ -209,12 +219,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ أدخل رقم صحيح")
         return
 
-    # زر أدمن
+    # ⭐ زر أدمن - متاح للجميع
     if text == "👑 أدمن":
-        if uid != OWNER_ID:
-            await update.message.reply_text("❌ للمالك فقط!")
-            return
-        await update.message.reply_text("🔑 أدخل كلمة المرور (0658):")
+        await update.message.reply_text(
+            "🔐 <b>لوحة تحكم الأدمن</b>\n\n"
+            "🔑 <b>أدخل كلمة المرور للمتابعة:</b>\n\n"
+            "⚠️ لديك 60 ثانية فقط",
+            parse_mode='HTML'
+        )
         context.user_data['waiting_pass'] = True
         return
 
@@ -254,13 +266,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✨ وعليكم السلام ورحمة الله وبركاته\nأهلاً {update.effective_user.first_name} 🌸"
         )
 
-# 🎯 معالج الأزرار التفاعلية
+# 🎯 معالج الأزرار التفاعلية - متاح لأي شخص دخل بكلمة السر
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    if query.from_user.id != OWNER_ID:
-        await query.edit_message_text("❌ هذه الأزرار للمالك فقط!")
+    # ⭐ التحقق من أنه دخل بكلمة السر الصح
+    if not context.user_data.get('is_admin'):
+        await query.edit_message_text("❌ يجب تسجيل الدخول أولاً! استخدم /admin")
         return
 
     data = query.data
